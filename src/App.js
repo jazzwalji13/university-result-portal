@@ -1,59 +1,41 @@
 import React, { useState } from 'react';
+import AdminLogin from './components/AdminLogin';
+import StudentDashboard from './components/StudentDashboard';
 import './App.css';
 
-// Import from components folder (where your files actually are)
-import HomePage from './components/HomePage';
-import StudentLogin from './components/StudentLogin';
-import AdminLogin from './components/AdminLogin';
-import ResultsPage from './components/ResultsPage';
-
 function App() {
-  const [currentPage, setCurrentPage] = useState('home');
-  const [studentData, setStudentData] = useState(null);
+  const [currentView, setCurrentView] = useState('home');
 
-  const handleStudentLogin = (rollNumber) => {
-    // For demo - create mock student data
-    const mockStudentData = {
-      rollNumber: rollNumber,
-      name: "John Doe", 
-      semester: "3rd Year - 1st Semester",
-      courses: [
-        { code: "21CSC301T", name: "Formal Language Automata", grade: "A", marks: 92 },
-        { code: "21CSC302J", name: "Computer Networks", grade: "B+", marks: 85 },
-        { code: "21CSE354T", name: "Full Stack Development", grade: "A", marks: 95 }
-      ]
-    };
-    setStudentData(mockStudentData);
-    setCurrentPage('results');
-  };
-
-  const handleBackToHome = () => {
-    setCurrentPage('home');
-    setStudentData(null);
-  };
-
-  const renderCurrentPage = () => {
-    switch (currentPage) {
-      case 'student':
-        return <StudentLogin onLogin={handleStudentLogin} onBack={handleBackToHome} />;
-      case 'admin':
-        return <AdminLogin onBack={handleBackToHome} />;
-      case 'results':
-        return <ResultsPage studentData={studentData} onBack={handleBackToHome} />;
-      case 'home':
-      default:
-        return (
-          <HomePage 
-            onStudentLogin={() => setCurrentPage('student')}
-            onAdminLogin={() => setCurrentPage('admin')}
-          />
-        );
-    }
-  };
+  const renderHomePage = () => (
+    <div className="home-container">
+      <div className="hero-section">
+        <h1>🎓 University Result Portal</h1>
+        <p>Manage and access academic results seamlessly</p>
+      </div>
+      
+      <div className="role-selection">
+        <div className="role-card" onClick={() => setCurrentView('admin')}>
+          <div className="role-icon">👨‍🏫</div>
+          <h3>Admin Login</h3>
+          <p>Manage results, upload bulk data, and analytics</p>
+          <button className="role-btn">Admin Access</button>
+        </div>
+        
+        <div className="role-card" onClick={() => setCurrentView('student')}>
+          <div className="role-icon">🎓</div>
+          <h3>Student Portal</h3>
+          <p>Check your results and download marksheets</p>
+          <button className="role-btn">View Results</button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="App">
-      {renderCurrentPage()}
+      {currentView === 'home' && renderHomePage()}
+      {currentView === 'admin' && <AdminLogin onBack={() => setCurrentView('home')} />}
+      {currentView === 'student' && <StudentDashboard onBack={() => setCurrentView('home')} />}
     </div>
   );
 }
