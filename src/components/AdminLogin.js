@@ -12,15 +12,34 @@ const AdminLogin = ({ onBack }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
 
-  const handleLogin = (e) => {
+  // Backend API base URL - POINTS TO YOUR SQLITE BACKEND
+  const API_BASE_URL = 'http://localhost:5000/api';
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (credentials.username === 'admin' && credentials.password === 'admin123') {
-      setIsLoggedIn(true);
-      setError('');
-    } else {
-      setError('Invalid credentials. Use admin/admin123 for demo.');
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setIsLoggedIn(true);
+        setError('');
+        // Store token for future requests
+        localStorage.setItem('adminToken', result.token);
+      } else {
+        setError(result.message || 'Login failed');
+      }
+    } catch (error) {
+      setError('Cannot connect to server. Make sure backend is running on port 5000.');
     }
   };
 
@@ -30,9 +49,10 @@ const AdminLogin = ({ onBack }) => {
     setCsvData([]);
     setUploadStatus('');
     setValidationErrors([]);
+    localStorage.removeItem('adminToken');
   };
 
-  // Handle CSV file selection
+  // Handle CSV file selection - CONNECTED TO BACKEND
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -43,140 +63,65 @@ const AdminLogin = ({ onBack }) => {
     }
 
     setUploadStatus('📁 Processing CSV file...');
-    parseCSVFile(file);
+    uploadCSVToBackend(file);
   };
 
-  // Parse CSV file
-  const parseCSVFile = (file) => {
-    const reader = new FileReader();
+  // UPDATED: Upload CSV to SQLite backend
+ const uploadCSVToBackend = async (file) => {
+  setIsUploading(true);
+  
+  try {
+    const fileText = await readFileAsText(file);
     
-    reader.onload = (e) => {
-      try {
-        const csvText = e.target.result;
-        console.log('Raw CSV text:', csvText);
-        
-        const parsedData = parseCSVText(csvText);
-        console.log('Parsed data:', parsedData);
-        
-        // Validate the parsed data
-        const errors = validateCSVData(parsedData);
-        
-        if (errors.length > 0) {
-          setValidationErrors(errors);
-          setUploadStatus('❌ Validation errors found');
-        } else {
-          setCsvData(parsedData);
-          setValidationErrors([]);
-          setUploadStatus(`✅ Successfully parsed ${parsedData.length} records`);
-        }
-      } catch (error) {
-        setUploadStatus('❌ Error parsing CSV file: ' + error.message);
-        console.error('CSV Parse Error:', error);
-      }
-    };
-    
-    reader.onerror = () => {
-      setUploadStatus('❌ Error reading file');
-    };
-    
-    reader.readAsText(file);
-  };
-
-  // CSV Parser
-  const parseCSVText = (csvText) => {
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    
-    if (lines.length < 2) {
-      throw new Error('CSV must have header and at least one data row');
-    }
-
-    const headers = lines[0].split(',').map(header => header.trim());
-    
-    const expectedHeaders = ['rollNumber', 'courseCode', 'marks', 'studentName'];
-    if (!expectedHeaders.every(header => headers.includes(header))) {
-      throw new Error('CSV must contain columns: rollNumber, courseCode, marks, studentName');
-    }
-
-    const data = [];
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      console.log(`Processing line ${i}:`, line);
-      
-      // Use regex to split by commas but ignore commas inside quotes
-      const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(value => {
-        let cleaned = value.trim();
-        // Remove surrounding quotes if they exist
-        if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
-            (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-          cleaned = cleaned.slice(1, -1);
-        }
-        return cleaned;
-      });
-      
-      console.log(`Line ${i} values:`, values);
-
-      if (values.length === headers.length) {
-        const row = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index];
-        });
-        data.push(row);
-      }
-    }
-
-    console.log('Final parsed data:', data);
-    return data;
-  };
-
-  // FIXED VALIDATION - Correct regex patterns
-  const validateCSVData = (data) => {
-    const errors = [];
-
-    data.forEach((row, index) => {
-      const rowNumber = index + 2;
-
-      // Clean the data before validation
-      const cleanRollNumber = String(row.rollNumber || '').trim().toUpperCase();
-      const cleanCourseCode = String(row.courseCode || '').trim().toUpperCase();
-      const cleanStudentName = String(row.studentName || '').trim();
-      
-      console.log(`Validating row ${rowNumber}:`, { 
-        rawRoll: row.rollNumber, 
-        cleanRoll: cleanRollNumber,
-        rawCourse: row.courseCode,
-        cleanCourse: cleanCourseCode,
-        marks: row.marks,
-        studentName: row.studentName
-      });
-
-      // FIXED: Validate roll number format: 21CSC201J (9 characters with ending letter)
-      const rollNumberRegex = /^[0-9]{2}[A-Z]{3}[0-9]{3}[A-Z]$/;
-      if (!rollNumberRegex.test(cleanRollNumber)) {
-        errors.push(`Row ${rowNumber}: Invalid roll number format "${row.rollNumber}". Expected: 21ABC123J`);
-      }
-
-      // FIXED: Validate course code format: 21CSC301T (9 characters with ending letter)
-      const courseCodeRegex = /^[0-9]{2}[A-Z]{3}[0-9]{3}[A-Z]$/;
-      if (!courseCodeRegex.test(cleanCourseCode)) {
-        errors.push(`Row ${rowNumber}: Invalid course code format "${row.courseCode}". Expected: 21ABC123T`);
-      }
-
-      // Validate marks (0-100)
-      const marks = parseInt(row.marks);
-      if (isNaN(marks) || marks < 0 || marks > 100) {
-        errors.push(`Row ${rowNumber}: Marks must be between 0-100 - "${row.marks}"`);
-      }
-
-      // Validate student name
-      if (!cleanStudentName || cleanStudentName.length < 2) {
-        errors.push(`Row ${rowNumber}: Student name is required and must be at least 2 characters`);
-      }
+    const response = await fetch(`${API_BASE_URL}/upload/csv-results`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: fileText,
     });
 
-    return errors;
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+   // Handle different response scenarios
+if (result.errors && result.errors.length > 0) {
+  setValidationErrors(result.errors);
+  setUploadStatus('❌ Validation errors found during upload');
+} else if (result.warnings && result.warnings.length > 0) {
+  // Show updates as positive messages
+  const updateMessages = result.warnings.map(warning => 
+    warning.replace('Updated existing result for', '✅ Updated')
+  );
+  setValidationErrors(updateMessages);
+  setUploadStatus(`✅ Successfully processed ${result.totalRecords} records!`);
+} else {
+  setCsvData(result.results || []);
+  setValidationErrors([]);
+  setUploadStatus(`✅ Successfully uploaded ${result.savedRecords} new records!`);
+}
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    setUploadStatus(`❌ Upload failed: ${error.message}`);
+  } finally {
+    setIsUploading(false);
+  }
+};
+  // Helper function to read file as text
+  const readFileAsText = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
   };
 
-  // Simulate upload to backend
+  // UPDATED: Real backend upload to publish results
   const handleUploadToServer = async () => {
     if (csvData.length === 0) {
       setUploadStatus('❌ No data to upload');
@@ -184,44 +129,117 @@ const AdminLogin = ({ onBack }) => {
     }
 
     setIsUploading(true);
-    setUploadStatus('⏳ Uploading to server...');
+    setUploadStatus('⏳ Publishing results to students...');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setUploadStatus(`✅ Successfully uploaded ${csvData.length} records to database!`);
+      // Extract unique roll numbers from csvData
+      const rollNumbers = [...new Set(csvData.map(row => row.rollNumber))];
+      
+      const response = await fetch(`${API_BASE_URL}/results/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rollNumbers }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Publish failed');
+      }
+
+      setUploadStatus(`✅ Successfully published ${result.modifiedCount} results to students!`);
       setCsvData([]);
       setValidationErrors([]);
       
+      // Clear file input
       const fileInput = document.getElementById('csv-file');
       if (fileInput) fileInput.value = '';
       
     } catch (error) {
-      setUploadStatus('❌ Upload failed. Please try again.');
+      setUploadStatus(`❌ Publish failed: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Download CSV template
-  const downloadTemplate = () => {
-    const template = `rollNumber,courseCode,marks,studentName
-21CSC201J,21CSC301T,85,John Doe
-21CSC202J,21CSC301T,92,Jane Smith
-21CSC203J,21CSC301T,78,Mike Johnson
-21CSC204J,21CSC302T,88,Sarah Wilson
-21CSC205J,21CSE354T,95,David Brown`;
+  // Download CSV template - UPDATED WITH UNIQUE DATA
+const downloadTemplate = () => {
+  const template = `rollNumber,courseCode,marks,studentName,courseName,semester,examType,published
+21CSC201J,21CSC301T,85,John Doe,Data Structures,3,Final,true
+21CSC202J,21CSC301T,92,Jane Smith,Data Structures,3,Final,true
+21CSC203J,21CSC302T,78,Mike Johnson,Algorithms,3,Final,true
+21CSC204J,21MAT101T,88,Sarah Wilson,Mathematics,3,Final,true
+21CSC205J,21PHY201T,95,David Brown,Physics,3,Final,true
+21CSC206J,21CSC303T,82,Emily Davis,Database Systems,3,Final,true
+21CSC207J,21MAT102T,76,Robert Wilson,Calculus,3,Final,true
+21CSC208J,21CSC304T,89,Lisa Anderson,Web Development,3,Final,true
+21CSC209J,21PHY202T,91,James Miller,Electronics,3,Final,true
+21CSC210J,21CSC305T,84,Sophia Lee,Software Engineering,3,Final,true`;
 
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'result_upload_template.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    
-    setUploadStatus('📋 Template downloaded successfully!');
+  const blob = new Blob([template], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'result_upload_template.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+  
+  setUploadStatus('📋 Template downloaded successfully! Use unique roll numbers and course codes.');
+};
+
+  // FIXED: Student Management Handler
+  const handleStudentManagement = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/students`);
+      const data = await response.json();
+      setUploadStatus(`🎓 Student Management: ${data.total} students in database`);
+      
+      // Show student list
+      if (data.students && data.students.length > 0) {
+        const studentList = data.students.slice(0, 3).map(s => 
+          `${s.rollNumber} - ${s.studentName}`
+        ).join(', ');
+        setUploadStatus(prev => prev + ` | Recent: ${studentList}...`);
+      }
+    } catch (error) {
+      setUploadStatus('❌ Cannot connect to student database');
+    }
+  };
+
+  // FIXED: Analytics Handler
+  const handleViewAnalytics = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/results/stats`);
+      const data = await response.json();
+      setUploadStatus(
+        `📊 Analytics: ${data.totalResults} total results, ${data.publishedResults} published, ${data.totalStudents} students`
+      );
+    } catch (error) {
+      setUploadStatus('❌ Cannot load analytics data');
+    }
+  };
+
+  // FIXED: Course Management Handler
+  const handleCourseManagement = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/results/stats`);
+      const data = await response.json();
+      
+      if (data.courseStats && data.courseStats.length > 0) {
+        const courseInfo = data.courseStats.slice(0, 3).map(c => 
+          `${c.courseCode} (Avg: ${Math.round(c.averageMarks)})`
+        ).join(', ');
+        setUploadStatus(`📚 Course Management: ${data.courseStats.length} courses | ${courseInfo}...`);
+      } else {
+        setUploadStatus('📚 Course Management: No courses found');
+      }
+    } catch (error) {
+      setUploadStatus('❌ Cannot load course data');
+    }
   };
 
   if (!isLoggedIn) {
@@ -284,6 +302,7 @@ const AdminLogin = ({ onBack }) => {
       <div className="dashboard-container">
         <div className="dashboard-header">
           <h2>👨‍🏫 Admin Dashboard</h2>
+          <p>Connected to SQLite Database</p>
           <button onClick={handleLogout} className="logout-btn">
             Logout
           </button>
@@ -307,9 +326,10 @@ const AdminLogin = ({ onBack }) => {
                 accept=".csv"
                 onChange={handleFileUpload}
                 className="file-input"
+                disabled={isUploading}
               />
               <label htmlFor="csv-file" className="file-label">
-                📁 Choose CSV File
+                {isUploading ? '⏳ Processing...' : '📁 Choose CSV File'}
               </label>
             </div>
 
@@ -367,7 +387,7 @@ const AdminLogin = ({ onBack }) => {
                   disabled={isUploading || validationErrors.length > 0}
                   className="upload-btn"
                 >
-                  {isUploading ? '⏳ Uploading...' : `📤 Upload ${csvData.length} Records`}
+                  {isUploading ? '⏳ Publishing...' : `📤 Publish ${csvData.length} Results`}
                 </button>
               </div>
             )}
@@ -377,7 +397,10 @@ const AdminLogin = ({ onBack }) => {
             <div className="feature-card">
               <h3>👥 Student Management</h3>
               <p>Manage student records and data</p>
-              <button className="feature-btn">
+              <button 
+                onClick={handleStudentManagement}
+                className="feature-btn"
+              >
                 Manage Students
               </button>
             </div>
@@ -385,7 +408,10 @@ const AdminLogin = ({ onBack }) => {
             <div className="feature-card">
               <h3>📊 Analytics</h3>
               <p>View performance analytics and reports</p>
-              <button className="feature-btn">
+              <button 
+                onClick={handleViewAnalytics}
+                className="feature-btn"
+              >
                 View Analytics
               </button>
             </div>
@@ -393,7 +419,10 @@ const AdminLogin = ({ onBack }) => {
             <div className="feature-card">
               <h3>🎓 Course Management</h3>
               <p>Manage courses and curriculum</p>
-              <button className="feature-btn">
+              <button 
+                onClick={handleCourseManagement}
+                className="feature-btn"
+              >
                 Manage Courses
               </button>
             </div>
@@ -408,4 +437,5 @@ const AdminLogin = ({ onBack }) => {
   );
 };
 
+// MAKE SURE THIS EXPORT STATEMENT IS AT THE END
 export default AdminLogin;
