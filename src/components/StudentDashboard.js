@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
 const StudentDashboard = ({ onBack }) => {
@@ -39,59 +39,64 @@ const StudentDashboard = ({ onBack }) => {
   const generatePDF = () => {
     if (!studentData) return;
 
-    const doc = new jsPDF();
-    
-    // Title
-    doc.setFontSize(20);
-    doc.setTextColor(40, 40, 40);
-    doc.text('UNIVERSITY RESULT PORTAL', 105, 15, { align: 'center' });
-    
-    // Student Info
-    doc.setFontSize(12);
-    doc.text(`Student Name: ${studentData.student.studentName}`, 20, 30);
-    doc.text(`Roll Number: ${studentData.student.rollNumber}`, 20, 40);
-    doc.text(`Department: ${studentData.student.department}`, 20, 50);
-    doc.text(`Semester: ${studentData.student.semester}`, 20, 60);
-    
-    // Results Table
-    const tableColumn = ["Course Code", "Course Name", "Marks", "Grade", "Semester"];
-    const tableRows = [];
-    
-    studentData.results.forEach(result => {
-      const grade = result.marks >= 90 ? 'A+' :
-                   result.marks >= 80 ? 'A' :
-                   result.marks >= 70 ? 'B' :
-                   result.marks >= 60 ? 'C' :
-                   result.marks >= 50 ? 'D' : 'F';
-                   
-      const resultData = [
-        result.courseCode,
-        result.courseName,
-        result.marks.toString(),
-        grade,
-        result.semester.toString()
-      ];
-      tableRows.push(resultData);
-    });
+    try {
+      const doc = new jsPDF();
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text('UNIVERSITY RESULT PORTAL', 105, 15, { align: 'center' });
+      
+      // Student Info
+      doc.setFontSize(12);
+      doc.text(`Student Name: ${studentData.student.studentName}`, 20, 30);
+      doc.text(`Roll Number: ${studentData.student.rollNumber}`, 20, 40);
+      doc.text(`Department: ${studentData.student.department}`, 20, 50);
+      doc.text(`Semester: ${studentData.student.semester}`, 20, 60);
+      
+      // Results Table
+      const tableColumn = ["Course Code", "Course Name", "Marks", "Grade", "Semester"];
+      const tableRows = [];
+      
+      studentData.results.forEach(result => {
+        const grade = result.marks >= 90 ? 'A+' :
+                     result.marks >= 80 ? 'A' :
+                     result.marks >= 70 ? 'B' :
+                     result.marks >= 60 ? 'C' :
+                     result.marks >= 50 ? 'D' : 'F';
+                     
+        const resultData = [
+          result.courseCode,
+          result.courseName,
+          result.marks.toString(),
+          grade,
+          result.semester.toString()
+        ];
+        tableRows.push(resultData);
+      });
 
-    // Add table
-    doc.autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 70,
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [41, 128, 185] }
-    });
+      // Add table using autoTable
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 70,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [41, 128, 185] }
+      });
 
-    // Footer
-    const finalY = doc.lastAutoTable.finalY + 10;
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text('Generated on: ' + new Date().toLocaleDateString(), 20, finalY);
-    doc.text('Official Result Document', 105, finalY, { align: 'center' });
-    
-    // Save PDF
-    doc.save(`Result_${studentData.student.rollNumber}.pdf`);
+      // Footer
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Generated on: ' + new Date().toLocaleDateString(), 20, finalY);
+      doc.text('Official Result Document', 105, finalY, { align: 'center' });
+      
+      // Save PDF
+      doc.save(`Result_${studentData.student.rollNumber}.pdf`);
+    } catch (pdfError) {
+      console.error('PDF generation error:', pdfError);
+      alert('PDF generation failed. Please try again.');
+    }
   };
 
   return (
