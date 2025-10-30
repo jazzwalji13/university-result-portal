@@ -77,4 +77,4 @@ const HomePage = ({ onStudentLogin, onAdminLogin }) => {
   );
 };
 
-export default HomePage;
+export default HomePage;        
